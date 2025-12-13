@@ -586,13 +586,13 @@ void AFortPlayerControllerAthena::ServerCreateBuildingActor(UObject* Context, FF
 	static auto K2_SpawnBuildingActor = ABuildingSMActor::GetDefaultObj()->GetFunction("K2_SpawnBuildingActor");
 
 	ABuildingSMActor* Building = nullptr;
-	if (K2_SpawnBuildingActor)
+	/*if (K2_SpawnBuildingActor)
 	{
 		FTransform SpawnTransform(BuildLoc, BuildRot);
 		Building = ABuildingSMActor::K2_SpawnBuildingActor(PlayerController, BuildingClass, SpawnTransform, PlayerController, nullptr, false, false);
 	}
-	else
-		Building = UWorld::SpawnActor<ABuildingSMActor>(BuildingClass, BuildLoc, BuildRot, PlayerController);
+	else*/
+		Building = UWorld::SpawnActorUnfinished<ABuildingSMActor>(BuildingClass, BuildLoc, BuildRot, PlayerController);
 
 	if (!Building)
 		return;
@@ -605,8 +605,14 @@ void AFortPlayerControllerAthena::ServerCreateBuildingActor(UObject* Context, FF
 
 	Building->bPlayerPlaced = true;
 
+	if (((AFortPlayerStateAthena*)PlayerController->PlayerState)->HasTeamIndex())
+		Building->Team = ((AFortPlayerStateAthena*)PlayerController->PlayerState)->TeamIndex;
+
+	if (Building->HasTeamIndex())
+		Building->TeamIndex = Building->Team;
+
 	Building->InitializeKismetSpawnedBuildingActor(Building, PlayerController, true, nullptr, false);
-	//UWorld::FinishSpawnActor(Building, BuildLoc, BuildRot);
+	UWorld::FinishSpawnActor(Building, BuildLoc, BuildRot);
 
 	if (!PlayerController->bBuildFree && !FConfiguration::bInfiniteMats)
 	{
@@ -614,12 +620,6 @@ void AFortPlayerControllerAthena::ServerCreateBuildingActor(UObject* Context, FF
 
 		PayBuildableClassPlacementCost(PlayerController, BuildingClassData);
 	}
-
-	if (((AFortPlayerStateAthena*)PlayerController->PlayerState)->HasTeamIndex()) 
-		Building->Team = ((AFortPlayerStateAthena*)PlayerController->PlayerState)->TeamIndex;
-	
-	if (Building->HasTeamIndex())
-		Building->TeamIndex = Building->Team;
 }
 
 void SetEditingPlayer(ABuildingSMActor* _this, AFortPlayerStateAthena* NewEditingPlayer)
@@ -690,6 +690,7 @@ void AFortPlayerControllerAthena::ServerBeginEditingBuildingActor(UObject* Conte
 	if (auto EditTool = PlayerController->MyFortPawn->CurrentWeapon->Cast<AFortWeap_EditingTool>())
 	{
 		EditTool->EditActor = Building;
+		EditTool->ForceNetUpdate();
 		EditTool->OnRep_EditActor();
 	}
 }
@@ -800,6 +801,7 @@ void AFortPlayerControllerAthena::ServerEndEditingBuildingActor(UObject* Context
 	if (auto EditTool = *(AFortWeap_EditingTool**)EditToolPtr)
 	{
 		EditTool->EditActor = nullptr;
+		EditTool->ForceNetUpdate();
 		EditTool->OnRep_EditActor();
 	}
 }
@@ -1224,7 +1226,18 @@ void AFortPlayerControllerAthena::ClientOnPawnDied(AFortPlayerControllerAthena* 
 				if (KillerPlayerState != PlayerState && VersionInfo.FortniteVersion >= 19)
 				{
 					auto Crown = FindObject<UFortItemDefinition>(L"/VictoryCrownsGameplay/Items/AGID_VictoryCrown.AGID_VictoryCrown");
-					KillerPlayerController->WorldInventory->GiveItem(Crown, 1);
+
+					TArray<FFortItemEntryStateValue> StateValues{};
+					auto Value = (FFortItemEntryStateValue*)malloc(FFortItemEntryStateValue::Size());
+					memset((PBYTE)Value, 0, FFortItemEntryStateValue::Size());
+
+					Value->IntValue = 1;
+					Value->StateType = 2;
+					StateValues.Add(*Value, FFortItemEntryStateValue::Size());
+
+					free(Value);
+					KillerPlayerController->WorldInventory->GiveItem(Crown, 1, 0, 0, true, true, 0, StateValues);
+					StateValues.Free();
 				}
 
 				GameState->WinningTeam = KillerPlayerState->TeamIndex;
