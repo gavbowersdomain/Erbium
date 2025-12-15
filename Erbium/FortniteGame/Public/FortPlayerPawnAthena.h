@@ -10,7 +10,6 @@ public:
     DEFINE_PROP(Velocity, FVector);
 };
 
-
 class UFortMovementComp_CharacterAthena : public UCharacterMovementComponent
 {
 public:
