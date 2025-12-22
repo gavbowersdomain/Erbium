@@ -944,7 +944,10 @@ void AFortPlayerControllerAthena::ServerPlayEmoteItem(UObject* Context, FFrame& 
 	if (!PlayerController || !PlayerController->MyFortPawn || !Asset)
 		return;
 
-	auto* AbilitySystemComponent = ((AFortPlayerStateAthena*)PlayerController->PlayerState)->AbilitySystemComponent;
+	auto AbilitySystemComponent = ((AFortPlayerStateAthena*)PlayerController->PlayerState)->AbilitySystemComponent;
+
+	if (auto CharacterVehicle = PlayerController->Pawn->Cast<AFortCharacterVehicle>())
+		AbilitySystemComponent = CharacterVehicle->OverrideAbilitySystemComponent;
 	UObject* AbilityToUse = nullptr;
 
 	static auto SprayClass = FindClass("AthenaSprayItemDefinition");
@@ -1232,9 +1235,12 @@ void AFortPlayerControllerAthena::ClientOnPawnDied(AFortPlayerControllerAthena* 
 				auto KillerWeapon = DamageCauser ? DamageCauser->WeaponData : nullptr;
 
 
-				KillerPlayerController->PlayWinEffects(KillerPawn, KillerWeapon, PlayerState->DeathInfo.DeathCause, false);
-				KillerPlayerController->ClientNotifyWon(KillerPawn, KillerWeapon, PlayerState->DeathInfo.DeathCause);
-				KillerPlayerController->ClientNotifyTeamWon(KillerPawn, KillerWeapon, PlayerState->DeathInfo.DeathCause);
+				if (VersionInfo.FortniteVersion >= 16)
+				{
+					KillerPlayerController->PlayWinEffects(KillerPawn, KillerWeapon, PlayerState->DeathInfo.DeathCause, false);
+					KillerPlayerController->ClientNotifyWon(KillerPawn, KillerWeapon, PlayerState->DeathInfo.DeathCause);
+					KillerPlayerController->ClientNotifyTeamWon(KillerPawn, KillerWeapon, PlayerState->DeathInfo.DeathCause);
+				}
 
 				if (KillerPlayerState != PlayerState && VersionInfo.FortniteVersion >= 19)
 				{
@@ -1413,7 +1419,7 @@ void AFortPlayerControllerAthena::InternalPickup(FFortItemEntry* PickupEntry)
 			{
 				if (!MyFortPawn || !MyFortPawn->CurrentWeapon)
 					return;
-
+				
 				if (AFortInventory::IsPrimaryQuickbar(((AFortWeapon*)MyFortPawn->CurrentWeapon)->WeaponData))
 				{
 					auto itemEntry = WorldInventory->Inventory.ReplicatedEntries.Search([&](FFortItemEntry& entry)
@@ -2436,11 +2442,24 @@ void AFortPlayerControllerAthena::ServerAttemptInteract_(UObject* Context, FFram
 		ServerAttemptInteract_OG(Context, Stack);
 		sendStat();
 
-		UFortVehicleSeatWeaponComponent* SeatWeaponComponent = (UFortVehicleSeatWeaponComponent*)Vehicle->GetComponentByClass(UFortVehicleSeatWeaponComponent::StaticClass());
+		UFortVehicleSeatWeaponComponent* SeatWeaponComponent = nullptr;
+
+		if (Vehicle)
+			SeatWeaponComponent = (UFortVehicleSeatWeaponComponent*)Vehicle->GetComponentByClass(UFortVehicleSeatWeaponComponent::StaticClass());
+		else if (auto CharacterVehicle = Pawn->Cast<AFortCharacterVehicle>())
+			SeatWeaponComponent = (UFortVehicleSeatWeaponComponent*)CharacterVehicle->GetComponentByClass(UFortVehicleSeatWeaponComponent::StaticClass());
+
 
 		if (SeatWeaponComponent)
 		{
-			auto SeatIdx = Vehicle->FindSeatIndex(Pawn);
+			UFortVehicleSeatComponent* SeatComponent = nullptr;
+
+			if (Vehicle)
+				SeatComponent = (UFortVehicleSeatComponent*)Vehicle->GetComponentByClass(UFortVehicleSeatComponent::StaticClass());
+			else if (auto CharacterVehicle = Pawn->Cast<AFortCharacterVehicle>())
+				SeatComponent = (UFortVehicleSeatComponent*)CharacterVehicle->GetComponentByClass(UFortVehicleSeatComponent::StaticClass());
+
+			auto SeatIdx = SeatComponent->FindSeatIndex(Pawn);
 			UFortWeaponItemDefinition* Weapon = nullptr;
 
 			for (int i = 0; i < SeatWeaponComponent->WeaponSeatDefinitions.Num(); i++)
@@ -2470,35 +2489,38 @@ void AFortPlayerControllerAthena::ServerAttemptInteract_(UObject* Context, FFram
 
 				auto Weapon = (AFortWeapon*)Pawn->CurrentWeapon;
 
-				auto RepWeaponInfo = (FMountedWeaponInfoRepped*)malloc(FMountedWeaponInfoRepped::Size());
-
-				if (RepWeaponInfo->HasHostVehicleCached())
+				if (Weapon)
 				{
-					RepWeaponInfo->HostVehicleCached.ObjectPointer = Vehicle;
-					RepWeaponInfo->HostVehicleCached.InterfacePointer = Vehicle->GetInterface(IFortVehicleInterface::StaticClass());
-				}
-				else
-					RepWeaponInfo->HostVehicleCachedActor = Vehicle;
-				RepWeaponInfo->HostVehicleSeatIndexCached = SeatIdx;
+					auto RepWeaponInfo = (FMountedWeaponInfoRepped*)malloc(FMountedWeaponInfoRepped::Size());
 
-				static auto DualClass = FindClass("FortWeaponRangedDualForVehicle");
+					if (RepWeaponInfo->HasHostVehicleCached())
+					{
+						RepWeaponInfo->HostVehicleCached.ObjectPointer = Vehicle;
+						RepWeaponInfo->HostVehicleCached.InterfacePointer = Vehicle->GetInterface(IFortVehicleInterface::StaticClass());
+					}
+					else
+						RepWeaponInfo->HostVehicleCachedActor = Vehicle;
+					RepWeaponInfo->HostVehicleSeatIndexCached = SeatIdx;
 
-				if (Weapon->IsA(DualClass))
-				{
-					static auto MountedWeaponInfoReppedOff = Weapon->GetOffset("MountedWeaponInfoRepped");
-					static auto OnRep_MountedWeaponInfoRepped = Weapon->GetFunction("OnRep_MountedWeaponInfoRepped");
-					*(FMountedWeaponInfoRepped*)(__int64(Weapon) + MountedWeaponInfoReppedOff) = *RepWeaponInfo;
-					Weapon->Call(OnRep_MountedWeaponInfoRepped);
-				}
-				else
-				{
-					static auto MountedWeaponInfoReppedOff = Weapon->GetOffset("MountedWeaponInfoRepped");
-					static auto OnRep_MountedWeaponInfoRepped = Weapon->GetFunction("OnRep_MountedWeaponInfoRepped");
-					*(FMountedWeaponInfoRepped*)(__int64(Weapon) + MountedWeaponInfoReppedOff) = *RepWeaponInfo;
-					Weapon->Call(OnRep_MountedWeaponInfoRepped);
-				}
+					static auto DualClass = FindClass("FortWeaponRangedDualForVehicle");
 
-				free(RepWeaponInfo);
+					if (Weapon->IsA(DualClass))
+					{
+						static auto MountedWeaponInfoReppedOff = Weapon->GetOffset("MountedWeaponInfoRepped");
+						static auto OnRep_MountedWeaponInfoRepped = Weapon->GetFunction("OnRep_MountedWeaponInfoRepped");
+						*(FMountedWeaponInfoRepped*)(__int64(Weapon) + MountedWeaponInfoReppedOff) = *RepWeaponInfo;
+						Weapon->Call(OnRep_MountedWeaponInfoRepped);
+					}
+					else
+					{
+						static auto MountedWeaponInfoReppedOff = Weapon->GetOffset("MountedWeaponInfoRepped");
+						static auto OnRep_MountedWeaponInfoRepped = Weapon->GetFunction("OnRep_MountedWeaponInfoRepped");
+						*(FMountedWeaponInfoRepped*)(__int64(Weapon) + MountedWeaponInfoReppedOff) = *RepWeaponInfo;
+						Weapon->Call(OnRep_MountedWeaponInfoRepped);
+					}
+
+					free(RepWeaponInfo);
+				}
 			}
 		}
 		return;
@@ -2585,12 +2607,18 @@ void AFortPlayerControllerAthena::ServerAttemptInteract_(UObject* Context, FFram
 		CollectorActor->Call(CollectorActor->GetFunction("BlueprintOnInteract"), Pawn);
 		//CollectorActor->PlayVendFX();
 	}
+	else if (auto LockDevice = ReceivingActor->Cast<ABuildingProp_LockDevice>())
+	{
+		printf("yo %s\n", LockDevice->LockableObject->Name.ToString().c_str());
+		LockDevice->CurrentLockState = 1;
+		LockDevice->OnRep_CurrentLockState();
+	}
 
 	ServerAttemptInteract_OG(Context, Stack);
 	sendStat();
 	//return bIsComp ? (void)callOG(((UFortControllerComponent_Interaction*)Context), Stack.GetCurrentNativeFunction(), ServerAttemptInteract, ReceivingActor, InteractComponent, InteractType, OptionalObjectData, InteractionBeingAttempted, RequestID) : callOG(PlayerController, Stack.GetCurrentNativeFunction(), ServerAttemptInteract, ReceivingActor, InteractComponent, InteractType, OptionalObjectData, InteractionBeingAttempted, RequestID);
 }
-
+ 
 void AFortPlayerControllerAthena::ServerDropAllItems(UObject* Context, FFrame& Stack)
 {
 	UFortItemDefinition* IgnoreItemDef;
@@ -3102,12 +3130,24 @@ void AFortPlayerControllerAthena::ServerRequestSeatChange_(UObject* Context, FFr
 		GetVehicleFunc = Pawn->GetFunction("BP_GetVehicle");
 	auto Vehicle = Pawn->Call<AFortAthenaVehicle*>(GetVehicleFunc);
 
-	if (!Vehicle)
-		return;
+	UFortVehicleSeatWeaponComponent* SeatWeaponComponent = nullptr;
 
-	auto SeatIdx = Vehicle->FindSeatIndex(PlayerController->MyFortPawn);
+	if (Vehicle)
+		SeatWeaponComponent = (UFortVehicleSeatWeaponComponent*)Vehicle->GetComponentByClass(UFortVehicleSeatWeaponComponent::StaticClass());
+	else if (auto CharacterVehicle = Pawn->Cast<AFortCharacterVehicle>())
+		SeatWeaponComponent = (UFortVehicleSeatWeaponComponent*)CharacterVehicle->GetComponentByClass(UFortVehicleSeatWeaponComponent::StaticClass());
 
-	UFortVehicleSeatWeaponComponent* SeatWeaponComponent = (UFortVehicleSeatWeaponComponent*)Vehicle->GetComponentByClass(UFortVehicleSeatWeaponComponent::StaticClass());
+	if (!SeatWeaponComponent)
+		return callOG(PlayerController, Stack.GetCurrentNativeFunction(), ServerRequestSeatChange, TargetSeatIndex);
+
+	UFortVehicleSeatComponent* SeatComponent = nullptr;
+
+	if (Vehicle)
+		SeatComponent = (UFortVehicleSeatComponent*)Vehicle->GetComponentByClass(UFortVehicleSeatComponent::StaticClass());
+	else if (auto CharacterVehicle = Pawn->Cast<AFortCharacterVehicle>())
+		SeatComponent = (UFortVehicleSeatComponent*)CharacterVehicle->GetComponentByClass(UFortVehicleSeatComponent::StaticClass());
+
+	auto SeatIdx = SeatComponent->FindSeatIndex(PlayerController->MyFortPawn);
 
 	UFortWeaponItemDefinition* OldWeapon = nullptr;
 	UFortWeaponItemDefinition* NewWeapon = nullptr;
@@ -3183,35 +3223,38 @@ void AFortPlayerControllerAthena::ServerRequestSeatChange_(UObject* Context, FFr
 
 		auto Weapon = (AFortWeapon*)Pawn->CurrentWeapon;
 
-		auto RepWeaponInfo = (FMountedWeaponInfoRepped*)malloc(FMountedWeaponInfoRepped::Size());
-
-		if (RepWeaponInfo->HasHostVehicleCached())
+		if (Weapon)
 		{
-			RepWeaponInfo->HostVehicleCached.ObjectPointer = Vehicle;
-			RepWeaponInfo->HostVehicleCached.InterfacePointer = Vehicle->GetInterface(IFortVehicleInterface::StaticClass());
-		}
-		else
-			RepWeaponInfo->HostVehicleCachedActor = Vehicle;
-		RepWeaponInfo->HostVehicleSeatIndexCached = SeatIdx;
+			auto RepWeaponInfo = (FMountedWeaponInfoRepped*)malloc(FMountedWeaponInfoRepped::Size());
 
-		static auto DualClass = FindClass("FortWeaponRangedDualForVehicle");
+			if (RepWeaponInfo->HasHostVehicleCached())
+			{
+				RepWeaponInfo->HostVehicleCached.ObjectPointer = Vehicle;
+				RepWeaponInfo->HostVehicleCached.InterfacePointer = Vehicle->GetInterface(IFortVehicleInterface::StaticClass());
+			}
+			else
+				RepWeaponInfo->HostVehicleCachedActor = Vehicle;
+			RepWeaponInfo->HostVehicleSeatIndexCached = SeatIdx;
 
-		if (Weapon->IsA(DualClass))
-		{
-			static auto MountedWeaponInfoReppedOff = Weapon->GetOffset("MountedWeaponInfoRepped");
-			static auto OnRep_MountedWeaponInfoRepped = Weapon->GetFunction("OnRep_MountedWeaponInfoRepped");
-			*(FMountedWeaponInfoRepped*)(__int64(Weapon) + MountedWeaponInfoReppedOff) = *RepWeaponInfo;
-			Weapon->Call(OnRep_MountedWeaponInfoRepped);
-		}
-		else
-		{
-			static auto MountedWeaponInfoReppedOff = Weapon->GetOffset("MountedWeaponInfoRepped");
-			static auto OnRep_MountedWeaponInfoRepped = Weapon->GetFunction("OnRep_MountedWeaponInfoRepped");
-			*(FMountedWeaponInfoRepped*)(__int64(Weapon) + MountedWeaponInfoReppedOff) = *RepWeaponInfo;
-			Weapon->Call(OnRep_MountedWeaponInfoRepped);
-		}
+			static auto DualClass = FindClass("FortWeaponRangedDualForVehicle");
 
-		free(RepWeaponInfo);
+			if (Weapon->IsA(DualClass))
+			{
+				static auto MountedWeaponInfoReppedOff = Weapon->GetOffset("MountedWeaponInfoRepped");
+				static auto OnRep_MountedWeaponInfoRepped = Weapon->GetFunction("OnRep_MountedWeaponInfoRepped");
+				*(FMountedWeaponInfoRepped*)(__int64(Weapon) + MountedWeaponInfoReppedOff) = *RepWeaponInfo;
+				Weapon->Call(OnRep_MountedWeaponInfoRepped);
+			}
+			else
+			{
+				static auto MountedWeaponInfoReppedOff = Weapon->GetOffset("MountedWeaponInfoRepped");
+				static auto OnRep_MountedWeaponInfoRepped = Weapon->GetFunction("OnRep_MountedWeaponInfoRepped");
+				*(FMountedWeaponInfoRepped*)(__int64(Weapon) + MountedWeaponInfoReppedOff) = *RepWeaponInfo;
+				Weapon->Call(OnRep_MountedWeaponInfoRepped);
+			}
+
+			free(RepWeaponInfo);
+		}
 	}
 }
 

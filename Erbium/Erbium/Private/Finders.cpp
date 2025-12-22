@@ -553,7 +553,7 @@ uint64_t FindServerReplicateActors()
         case 9:
         case 8:
         case 7:
-            if (VersionInfo.FortniteVersion >= 7.40 && VersionInfo.FortniteVersion <= 8.40)
+            if (VersionInfo.FortniteVersion >= 7.40 && VersionInfo.FortniteVersion <= 8.40 && VersionInfo.FortniteVersion != 8.30)
                 ServerReplicateActorsVft = 0x57;
             else
                 ServerReplicateActorsVft = 0x56;
@@ -972,6 +972,9 @@ uint64_t FindFinishedTargetSpline()
             if (!FinishedTargetSpline)
                 FinishedTargetSpline = Memcury::Scanner::FindPattern("48 8B C4 48 89 58 10 48 89 70 18 48 89 78 20 55 41 54 41 55 41 56 41 57 48 8D A8 ? ? ? ? 48 81 EC ? ? ? ? 48 8B 05 ? ? ? ? 48 33 C4 48 89 85 ? ? ? ? 48 8B B9 ? ? ? ? 45 33 E4 48 8B D9 48 85 FF 74 0F").Get();
 
+            if (!FinishedTargetSpline)
+                FinishedTargetSpline = Memcury::Scanner::FindPattern("48 8B C4 48 89 58 10 48 89 70 18 48 89 78 20 55 41 54 41 55 41 56 41 57 48 8D A8 ? ? ? ? 48 81 EC ? ? ? ? 48 8B 05 ? ? ? ? 48 33 C4 48 89 85 ? ? ? ? 48 8B B9 ? ? ? ? 48 8B D9 48 85 FF 0F 84").Get();
+
             return FinishedTargetSpline;
         }
         else if (VersionInfo.EngineVersion == 5.1)
@@ -1038,7 +1041,7 @@ uint64_t FindPickTeam()
         if (!Addr.Get())
             Addr = Memcury::Scanner::FindStringRef(L"PickTeam for [%s] used beacon value [%s]", true, 0, VersionInfo.FortniteVersion >= 19);
 
-        PickTeam = Addr.ScanFor(VersionInfo.FortniteVersion <= 4.1 ? std::vector<uint8_t>{ 0x48, 0x89, 0x6C } : (VersionInfo.FortniteVersion >= 16 ? std::vector<uint8_t>{ 0x48, 0x89, 0x5C } : std::vector<uint8_t>{ 0x40, 0x55 }), false, 0, 1, 1000).Get();
+        PickTeam = Addr.ScanFor(VersionInfo.FortniteVersion <= 4.1 ? std::vector<uint8_t>{ 0x48, 0x89, 0x6C } : (VersionInfo.FortniteVersion >= 16 ? std::vector<uint8_t>{ 0x48, 0x89, 0x5C } : std::vector<uint8_t>{ 0x40, 0x55 }), false).Get();
     }
 
     return PickTeam;
@@ -1658,7 +1661,12 @@ uint64_t FindCallPreReplication()
         else if (VersionInfo.FortniteVersion >= 2.5 && VersionInfo.FortniteVersion <= 3.3)
             return CallPreReplication = Memcury::Scanner::FindPattern("48 85 D2 0F 84 ? ? ? ? 56 41 56 48 83 EC 38 4C 8B F2").Get();
         else if (std::floor(VersionInfo.FortniteVersion) == 20)
-            return CallPreReplication = Memcury::Scanner::FindPattern("48 85 D2 0F 84 ? ? ? ? 48 89 5C 24 ? 48 89 6C 24 ? 48 89 74 24 ? 57 41 56 41 57 48 83 EC 40 F6 41 58 30 48 8B EA 48 8B D9 40 B6 01").Get();
+        {
+            CallPreReplication = Memcury::Scanner::FindPattern("48 85 D2 0F 84 ? ? ? ? 48 89 5C 24 ? 48 89 6C 24 ? 48 89 74 24 ? 57 41 56 41 57 48 83 EC 40 F6 41 58 30 48 8B EA 48 8B D9 40 B6 01").Get();
+
+            if (!CallPreReplication)
+                CallPreReplication = Memcury::Scanner::FindPattern("48 85 D2 0F 84 ? ? ? ? 48 89 5C 24 ? 48 89 6C 24 ? 48 89 74 24 ? 57 41 56 41 57 48 83 EC 40 F6 41 58 30 48 8B EA 48 8B D9 75").Get();
+        }
         else if (VersionInfo.FortniteVersion < 22)
             return CallPreReplication = Memcury::Scanner::FindPattern("48 85 D2 0F 84 ? ? ? ? 48 89 5C 24 ? 48 89 6C 24 ? 48 89 74 24 ? 57 41 56 41 57 48 83 EC 40 F6 41 58 30 4C 8B F2").Get();
         else if (VersionInfo.FortniteVersion <= 22.30)
@@ -2799,6 +2807,37 @@ uint64 FindInitializePlayerGameplayAbilities()
     }
 
     return 0;
+}
+
+uint64 FindListenCall()
+{
+    static uint64_t ListenCall = 0;
+    static bool bInitialized = false;
+
+    if (!bInitialized)
+    {
+        bInitialized = true;
+
+        if (VersionInfo.FortniteVersion <= 6 || VersionInfo.FortniteVersion > 16)
+            return ListenCall = 0;
+
+        auto sRef = Memcury::Scanner::FindStringRef(L"LoadMap: failed to Listen(%s)");
+
+        if (!sRef.IsValid())
+            return ListenCall = 0;
+
+        for (int i = 0; i < 0x100; i++)
+        {
+            auto Ptr = (uint8_t*)(sRef.Get() - i);
+
+            if (*Ptr == 0xE8 && *(Ptr + 5) == 0x84 && *(Ptr + 6) == 0xC0)
+                return ListenCall = uint64_t(Ptr);
+        }
+
+        return 0;
+    }
+
+    return ListenCall;
 }
 
 void FindNullsAndRetTrues()

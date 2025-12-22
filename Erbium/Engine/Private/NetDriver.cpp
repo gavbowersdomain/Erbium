@@ -552,7 +552,7 @@ void UNetDriver::TickFlush(UNetDriver* Driver, float DeltaSeconds)
 					TerminateProcess(GetCurrentProcess(), 0);
 			}
 		}
-		else if (Driver == WorldNetDriver && VersionInfo.FortniteVersion >= 18)
+		else if (Driver == WorldNetDriver && VersionInfo.FortniteVersion >= 18 && VersionInfo.FortniteVersion < 25.20)
 		{
 			for (auto& UncastedPlayer : GameMode->AlivePlayers)
 			{
@@ -905,13 +905,13 @@ void UNetDriver::PostLoadHook()
 		ClientWorldPackageNameOffset = 0x1730;
 	else if (VersionInfo.FortniteVersion >= 28)
 		ClientWorldPackageNameOffset = 0x1828;
-	else if (VersionInfo.EngineVersion >= 5.3)
+	else if (VersionInfo.FortniteVersion >= 25.30)
 		ClientWorldPackageNameOffset = 0x1820;
 	else if (VersionInfo.EngineVersion == 5.2)
 		ClientWorldPackageNameOffset = 0x1818;
 	else if (VersionInfo.FortniteVersion >= 24)
 		ClientWorldPackageNameOffset = 0x1820;
-	else if (VersionInfo.FortniteVersion >= 20.40)
+	else if (VersionInfo.FortniteVersion >= 20.20)
 		ClientWorldPackageNameOffset = 0x16b8;
 	else if (VersionInfo.FortniteVersion >= 20)
 		ClientWorldPackageNameOffset = 0x1698;
@@ -919,7 +919,7 @@ void UNetDriver::PostLoadHook()
 	if (VersionInfo.FortniteVersion >= 25.10)
 	{
 		DestroyedStartupOrDormantActorsOffset = VersionInfo.FortniteVersion >= 28 ? 0x328 : 0x318;
-		DestroyedStartupOrDormantActorGUIDsOffset = VersionInfo.FortniteVersion >= 28 ? 0x14b8 : (VersionInfo.EngineVersion == 5.2 ? 0x14a8 : 0x14b0);
+		DestroyedStartupOrDormantActorGUIDsOffset = VersionInfo.FortniteVersion >= 28 ? 0x14b8 : (VersionInfo.FortniteVersion < 25.30 ? 0x14a8 : 0x14b0);
 		ClientVisibleLevelNamesOffset = DestroyedStartupOrDormantActorGUIDsOffset + (VersionInfo.FortniteVersion < 24 ? 0x190 : 0x1e0);
 	}
 	else if (VersionInfo.FortniteVersion >= 23)
@@ -937,7 +937,7 @@ void UNetDriver::PostLoadHook()
 	else if (VersionInfo.FortniteVersion >= 20)
 	{
 		DestroyedStartupOrDormantActorsOffset = 0x2f0;
-		DestroyedStartupOrDormantActorGUIDsOffset = 0x1468;
+		DestroyedStartupOrDormantActorGUIDsOffset = VersionInfo.FortniteVersion >= 20.20 ? 0x1488 : 0x1468;
 		ClientVisibleLevelNamesOffset = DestroyedStartupOrDormantActorGUIDsOffset + 0xa0;
 	}
 

@@ -896,7 +896,8 @@ namespace SDK
 	struct FPrimaryAssetId
 	{
 	public:
-		uint8_t Padding[0x10];
+		FName PrimaryAssetType;
+		uint8_t Padding[0x8];
 	};
 
 	class UKismetSystemLibrary : public SDK::UObject
@@ -1009,7 +1010,7 @@ namespace SDK
 		__forceinline void* StepCompiledInRefInternal(void* _Tm)
 		{
 			MostRecentPropertyAddress = nullptr;
-			if (VersionInfo.FortniteVersion >= 20)
+			if (VersionInfo.FortniteVersion >= 20.20)
 				*(void**)(__int64(this) + 0x40) = nullptr;
 
 			if (Code)

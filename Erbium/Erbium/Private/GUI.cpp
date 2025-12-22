@@ -123,11 +123,12 @@ void GUI::Init()
     mStyle.WindowRounding = 0.f;
     mStyle.ItemSpacing = ImVec2(20, 6);
     mStyle.ItemInnerSpacing = ImVec2(8, 4);
-    mStyle.FrameRounding = 2.5f;
+    mStyle.FrameRounding = 4.5f;
     mStyle.GrabMinSize = 14.0f;
     mStyle.GrabRounding = 16.0f;
     mStyle.ScrollbarSize = 12.0f;
     mStyle.ScrollbarRounding = 16.0f;
+    mStyle.ChildRounding = 8.f;
 
     ImGuiStyle& style = mStyle;
     style.Colors[ImGuiCol_Text] = ImVec4(0.85f, 0.95f, 0.90f, 0.80f);
@@ -263,10 +264,32 @@ void GUI::Init()
         }
 
         static char commandBuffer[1024] = { 0 };
+        auto GameMode = UWorld::GetWorld() ? (AFortGameMode*)UWorld::GetWorld()->AuthorityGameMode : nullptr;
         switch (SelectedUI)
         {
         case 0:
-            ImGui::Text((std::string("Status: ") + (gsStatus == NotReady ? "Setting up the server..." : (gsStatus == Joinable ? "Joinable!" : "Match Started."))).c_str());
+            if (gsStatus >= Joinable)
+                ImGui::BeginChild("ServerInfo", ImVec2(245 * main_scale, 130 * main_scale), ImGuiChildFlags_Borders/*, ImGuiWindowFlags_ChildWindow | ImGuiWindowFlags_AlwaysHorizontallScrollbar */);
+            ImGui::Text((std::string("Status: ") + (gsStatus == NotReady ? "Setting up the server..." : (gsStatus == Joinable ? "Joinable!" : "Match Started"))).c_str());
+            if (gsStatus >= Joinable)
+            {
+                ImGui::Text((std::string("Player Count: ") + std::to_string(GameMode->AlivePlayers.Num())).c_str());
+                ImGui::Text((std::string("Port: ") + std::to_string(FConfiguration::Port)).c_str());
+
+                auto Playlist = VersionInfo.FortniteVersion >= 3.5 && GameMode->HasWarmupRequiredPlayerCount() ? (GameMode->GameState->HasCurrentPlaylistInfo() ? GameMode->GameState->CurrentPlaylistInfo.BasePlaylist : GameMode->GameState->CurrentPlaylistData) : nullptr;
+
+                if (Playlist)
+                {
+                    FString Name = UKismetTextLibrary::Conv_TextToString(Playlist->UIDisplayName);
+                    ImGui::Text((UEAllocatedString("Playlist: ") + Name.ToString()).c_str());
+                }
+                ImGui::Text((std::string("Running for ") + std::to_string((int)floor(UGameplayStatics::GetTimeSeconds(GameMode))) + "s").c_str());
+            }
+            if (gsStatus >= Joinable)
+            {
+                ImGui::EndChild();
+                ImGui::Spacing();
+            }
 
             if (gsStatus <= Joinable)
                 ImGui::Checkbox("Lategame", &FConfiguration::bLateGame);
@@ -298,7 +321,6 @@ void GUI::Init()
             if (ImGui::Button("Pause Safe Zone"))
             {
                 UFortGameStateComponent_BattleRoyaleGamePhaseLogic::bPausedZone = true;
-                auto GameMode = (AFortGameMode*)UWorld::GetWorld()->AuthorityGameMode;
                 if (GameMode->HasbSafeZonePaused())
                     GameMode->bSafeZonePaused = true;
                 UKismetSystemLibrary::ExecuteConsoleCommand(UWorld::GetWorld(), FString(L"pausesafezone"), nullptr);
@@ -307,7 +329,6 @@ void GUI::Init()
             if (ImGui::Button("Resume Safe Zone"))
             {
                 UFortGameStateComponent_BattleRoyaleGamePhaseLogic::bPausedZone = false;
-                auto GameMode = (AFortGameMode*)UWorld::GetWorld()->AuthorityGameMode;
                 if (GameMode->HasbSafeZonePaused())
                     GameMode->bSafeZonePaused = false;
                 UKismetSystemLibrary::ExecuteConsoleCommand(UWorld::GetWorld(), FString(L"startsafezone"), nullptr);
@@ -315,8 +336,6 @@ void GUI::Init()
 
             if (ImGui::Button("Skip Safe Zone"))
             {
-                auto GameMode = (AFortGameMode*)UWorld::GetWorld()->AuthorityGameMode;
-
                 if (GameMode->HasSafeZoneIndicator())
                 {
                     if (GameMode->SafeZoneIndicator)
@@ -341,8 +360,6 @@ void GUI::Init()
 
             if (ImGui::Button("Start Shrinking Safe Zone"))
             {
-                auto GameMode = (AFortGameMode*)UWorld::GetWorld()->AuthorityGameMode;
-
                 if (GameMode->HasSafeZoneIndicator())
                 {
                     if (GameMode->SafeZoneIndicator)
@@ -371,7 +388,7 @@ void GUI::Init()
             ImGui::Checkbox("Keep Inventory", &FConfiguration::bKeepInventory);
 
             ImGui::SliderInt("Siphon Amount:", &FConfiguration::SiphonAmount, 0, 200);
-            ImGui::SliderInt("Tick Rate (dont change unless you know what this is):", &FConfiguration::MaxTickRate, 30, 120);
+            ImGui::SliderInt("Tick Rate:", &FConfiguration::MaxTickRate, 30, 120);
 
             if (ImGui::Button("Reset Builds"))
             {
@@ -382,7 +399,18 @@ void GUI::Init()
                     if (Build->bPlayerPlaced)
                         Build->K2_DestroyActor();
 
-                //Builds.Free();
+                Builds.Free();
+            }
+
+            if (ImGui::Button("Destroy Floor Loot"))
+            {
+				TArray<AFortPickupAthena*> Pickups;
+				Utils::GetAll<AFortPickupAthena>(Pickups);
+				
+                for (auto& Pickup : Pickups)
+                    Pickup->K2_DestroyActor();
+
+				Pickups.Free();
             }
             break;
         case 4:

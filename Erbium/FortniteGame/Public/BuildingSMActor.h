@@ -76,6 +76,17 @@ public:
     DefUHookOg(ServerSpawnDeco_Implementation);
 };
 
+class ABuildingProp_LockDevice : public AActor
+{
+public:
+    UCLASS_COMMON_MEMBERS(ABuildingProp_LockDevice);
+
+    DEFINE_PROP(CurrentLockState, uint8);
+    DEFINE_PROP(LockableObject, UObject*);
+
+    DEFINE_FUNC(OnRep_CurrentLockState, void);
+};
+
 class ABuildingSMActor : public AActor
 {
 public:
