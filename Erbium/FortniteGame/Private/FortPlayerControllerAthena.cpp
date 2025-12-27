@@ -3125,27 +3125,19 @@ void AFortPlayerControllerAthena::ServerRequestSeatChange_(UObject* Context, FFr
 
 	auto Pawn = PlayerController->Pawn;
 
-	static auto GetVehicleFunc = Pawn->GetFunction("GetVehicle");
+	static auto GetVehicleFunc = Pawn->GetFunction("GetVehicleActor");
 	if (!GetVehicleFunc)
-		GetVehicleFunc = Pawn->GetFunction("BP_GetVehicle");
-	auto Vehicle = Pawn->Call<AFortAthenaVehicle*>(GetVehicleFunc);
+		GetVehicleFunc = Pawn->GetFunction("GetVehicle");
+	auto Vehicle = Pawn->Call<AActor*>(GetVehicleFunc);
 
-	UFortVehicleSeatWeaponComponent* SeatWeaponComponent = nullptr;
+	if (!Vehicle && Pawn->IsA<AFortCharacterVehicle>())
+		Vehicle = Pawn;
 
-	if (Vehicle)
-		SeatWeaponComponent = (UFortVehicleSeatWeaponComponent*)Vehicle->GetComponentByClass(UFortVehicleSeatWeaponComponent::StaticClass());
-	else if (auto CharacterVehicle = Pawn->Cast<AFortCharacterVehicle>())
-		SeatWeaponComponent = (UFortVehicleSeatWeaponComponent*)CharacterVehicle->GetComponentByClass(UFortVehicleSeatWeaponComponent::StaticClass());
-
+	UFortVehicleSeatWeaponComponent* SeatWeaponComponent = (UFortVehicleSeatWeaponComponent*)Vehicle->GetComponentByClass(UFortVehicleSeatWeaponComponent::StaticClass());
 	if (!SeatWeaponComponent)
 		return callOG(PlayerController, Stack.GetCurrentNativeFunction(), ServerRequestSeatChange, TargetSeatIndex);
 
-	UFortVehicleSeatComponent* SeatComponent = nullptr;
-
-	if (Vehicle)
-		SeatComponent = (UFortVehicleSeatComponent*)Vehicle->GetComponentByClass(UFortVehicleSeatComponent::StaticClass());
-	else if (auto CharacterVehicle = Pawn->Cast<AFortCharacterVehicle>())
-		SeatComponent = (UFortVehicleSeatComponent*)CharacterVehicle->GetComponentByClass(UFortVehicleSeatComponent::StaticClass());
+	UFortVehicleSeatComponent* SeatComponent = (UFortVehicleSeatComponent*)Vehicle->GetComponentByClass(UFortVehicleSeatComponent::StaticClass());
 
 	auto SeatIdx = SeatComponent->FindSeatIndex(PlayerController->MyFortPawn);
 
@@ -3262,9 +3254,6 @@ void AFortPlayerControllerAthena::ServerLoadingScreenDropped_(UObject* Context, 
 {
 	Stack.IncrementCode();
 	auto PlayerController = (AFortPlayerControllerAthena*)Context;
-
-	if (wcsstr(FConfiguration::Playlist, L"/Game/Athena/Playlists/Creative/Playlist_PlaygroundV2.Playlist_PlaygroundV2"))
-		AFortAthenaCreativePortal::Create(PlayerController);
 
 	callOG(PlayerController, Stack.GetCurrentNativeFunction(), ServerLoadingScreenDropped);
 }
